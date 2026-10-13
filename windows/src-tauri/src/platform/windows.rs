@@ -350,6 +350,9 @@ pub fn set_pointer_watch(_active: bool) {}
 /// `set_position` already places a Win32 window on the right display.
 pub fn pin_to_monitor(_win: &WebviewWindow, _x: i32, _y: i32) {}
 
+/// Win32 handles always-on-top via Tauri set_always_on_top.
+pub fn keep_above(_win: &WebviewWindow) {}
+
 // ── Session windows ("Open terminal") ─────────────────────────────────────────
 //
 // See session_window.rs: the relay's ancestors lead to the terminal or editor

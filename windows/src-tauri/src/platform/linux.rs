@@ -386,17 +386,29 @@ pub fn make_non_activating(win: &WebviewWindow) {
         crate::log::line(format!("island is a regular window ({why})"));
         gw.set_accept_focus(false);
         if !gw.is_realized() {
-            // On X11 a Dock is kept above everything and is the only kind of
-            // window, besides the desktop, that "show desktop" leaves alone.
-            // COUCOU_DOCK=0 falls back to a utility window.
-            let dock = std::env::var("COUCOU_DOCK").map(|v| v != "0").unwrap_or(true);
-            gw.set_type_hint(if dock {
-                gtk::gdk::WindowTypeHint::Dock
-            } else {
-                gtk::gdk::WindowTypeHint::Utility
-            });
+            let hint = match std::env::var("COUCOU_HINT").as_deref() {
+                Ok("dock") => gtk::gdk::WindowTypeHint::Dock,
+                Ok("utility") => gtk::gdk::WindowTypeHint::Utility,
+                _ => gtk::gdk::WindowTypeHint::Notification,
+            };
+            gw.set_type_hint(hint);
+            gw.realize();
         }
+        if let Some(gdk_win) = gw.window() {
+            gdk_win.set_override_redirect(true);
+            gdk_win.raise();
+        }
+        gw.stick();
         gw.set_keep_above(true);
+        gw.connect_map_event(|w, _| {
+            if let Some(gdk_win) = w.window() {
+                gdk_win.set_override_redirect(true);
+                gdk_win.raise();
+            }
+            w.stick();
+            w.set_keep_above(true);
+            gtk::glib::Propagation::Proceed
+        });
         return;
     }
     // tao gives undecorated Wayland windows an empty titlebar to force
@@ -411,6 +423,13 @@ pub fn make_non_activating(win: &WebviewWindow) {
         layer::gtk_layer_set_layer(ptr, layer::LAYER_OVERLAY);
         // Top edge only: the compositor centres the surface horizontally.
         layer::gtk_layer_set_anchor(ptr, layer::EDGE_TOP, 1);
+        let top_offset = std::env::var("COUCOU_TOP_OFFSET")
+            .ok()
+            .and_then(|v| v.parse::<i32>().ok())
+            .unwrap_or(0);
+        if top_offset > 0 {
+            layer::gtk_layer_set_margin(ptr, layer::EDGE_TOP, top_offset);
+        }
         // -1: sit right against the screen edge, over any top panel, the way
         // the Mac island sits in the notch.
         layer::gtk_layer_set_exclusive_zone(ptr, -1);
@@ -531,6 +550,18 @@ pub fn pin_to_monitor(win: &WebviewWindow, x: i32, y: i32) {
     let Some(monitor) = monitor else { return };
     let mon_ptr: *mut gtk::gdk::ffi::GdkMonitor = monitor.to_glib_none().0;
     unsafe { layer::gtk_layer_set_monitor(gtk_window_ptr(&gw), mon_ptr) };
+}
+
+/// Ensures the window maintains its always-on-top and sticky state across all workspaces.
+pub fn keep_above(win: &WebviewWindow) {
+    if let Ok(gw) = win.gtk_window() {
+        if let Some(gdk_win) = gw.window() {
+            gdk_win.set_override_redirect(true);
+            gdk_win.raise();
+        }
+        gw.stick();
+        gw.set_keep_above(true);
+    }
 }
 
 /// Temporarily allow keyboard focus so a text field inside the island can be

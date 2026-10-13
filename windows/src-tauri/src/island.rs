@@ -311,7 +311,19 @@ pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     let pw = (lw * scale).round().max(1.0) as u32;
     let ph = (lh * scale).round().max(1.0) as u32;
     let x = mp.x + (ms.width as i32 - pw as i32) / 2;
-    let y = mp.y;
+
+    #[cfg(target_os = "linux")]
+    let top_offset = {
+        let offset_logical = std::env::var("COUCOU_TOP_OFFSET")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(28.0);
+        (offset_logical * scale).round() as i32
+    };
+    #[cfg(not(target_os = "linux"))]
+    let top_offset = 0;
+
+    let y = mp.y + top_offset;
 
     // GTK never sizes a non-resizable window below its natural size (200 px
     // here), so on Linux the 6 px wake strip would stay a 200 px block. tao
@@ -327,6 +339,8 @@ pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     // Moving across displays can rescale the window: re-assert the physical size.
     let _ = win.set_size(PhysicalSize::new(pw, ph));
     let _ = win.set_always_on_top(true);
+    let _ = win.set_visible_on_all_workspaces(true);
+    platform::keep_above(&win);
 }
 
 /// Position, size and scale of the monitor the island lives on. Any change here
